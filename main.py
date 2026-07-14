@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 import argparse
+from prompt import system_prompt
 
 
 def main():
@@ -26,14 +27,13 @@ def main():
 
     # Ask the model using the prompt the user actually passed on the command line.
     messages=[
-            {
-                "role": "user",
-                "content": args.user_prompt,
-            }
+            {"role": "system", "content": system_prompt},
+            { "role": "user", "content": args.user_prompt},
         ]
     response = client.chat.completions.create(
         model="openrouter/free",
         messages=messages,
+        temperature=0,
     )
 
     # The API should return usage data; if it doesn't, the request likely failed.
