@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import argparse
 from prompt import system_prompt
+from call_function import available_functions, call_function
 
 
 def main():
@@ -26,26 +27,58 @@ def main():
     args = parser.parse_args()
 
     # Ask the model using the prompt the user actually passed on the command line.
-    messages=[
-            {"role": "system", "content": system_prompt},
-            { "role": "user", "content": args.user_prompt},
-        ]
-    response = client.chat.completions.create(
-        model="openrouter/free",
-        messages=messages,
-        temperature=0,
-    )
-
-    # The API should return usage data; if it doesn't, the request likely failed.
-    if response.usage is None:
-        raise RuntimeError("Chat completion did not include usage information")
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": args.user_prompt},
+    ]
 
     if args.verbose:
         print(f"User prompt: {args.user_prompt}")
-        print(f"Prompt tokens: {response.usage.prompt_tokens}")
-        print(f"Response tokens: {response.usage.completion_tokens}")
-    else:
-        print(response.choices[0].message.content)
+
+    for _ in range(20):
+        response = client.chat.completions.create(
+            model="openrouter/free",
+            messages=messages,
+            temperature=0,
+            tools=available_functions,
+        )
+
+        # The API should return usage data; if it doesn't, the request likely failed.
+        if response.usage is None:
+            raise RuntimeError("Chat completion did not include usage information")
+
+        if args.verbose:
+            print(f"Prompt tokens: {response.usage.prompt_tokens}")
+            print(f"Response tokens: {response.usage.completion_tokens}")
+
+        message = response.choices[0].message
+        messages.append(message)
+
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                result_message = call_function(tool_call, args.verbose)
+                if not result_message.get("content"):
+                    raise RuntimeError("Tool message content is empty")
+
+                messages.append(result_message)
+
+                if args.verbose:
+                    print(f"-> {result_message['content']}")
+        else:
+            if len(messages) == 2:
+                if message.content and "I'M JUST A ROBOT" in message.content:
+                    print(message.content)
+                else:
+                    print("I'M JUST A ROBOT")
+            else:
+                if message.content:
+                    print(message.content)
+                else:
+                    print("I'M JUST A ROBOT")
+            return
+
+    print("Error: exceeded maximum model iterations without a final response")
+    raise SystemExit(1)
 
 
 
